@@ -1521,7 +1521,7 @@ class VetPharmacyApp:
         
         self.sale_search_entry = StyledEntry(search_frame, width=35)
         self.sale_search_entry.pack(side='left', fill='x', expand=True)
-        self.sale_search_entry.bind('<KeyRelease>', lambda e: self.after(50, self.refresh_sale_products))
+        self.sale_search_entry.bind('<KeyRelease>', lambda e: self.refresh_sale_products())
         
         # Список товаров для продажи
         products_container = CardFrame(left_frame, padx=5, pady=5)
@@ -1642,8 +1642,8 @@ class VetPharmacyApp:
         # Инициализация корзины
         self.cart = []
         
-        # Загружаем товары для продажи после создания всех виджетов
-        self.after(100, self.refresh_sale_products)
+        # Загружаем товары для продажи СРАЗУ после создания всех виджетов
+        self.refresh_sale_products()
         
         # ===== ПРАВАЯ ПАНЕЛЬ - ИСТОРИЯ ПРОДАЖ =====
         right_frame = CardFrame(main_pane, padx=15, pady=15)
@@ -1672,7 +1672,7 @@ class VetPharmacyApp:
                                  values=["7", "14", "30", "90"], 
                                  width=5, state="readonly")
         days_combo.pack(side='left', padx=(0, 10))
-        days_combo.bind('<<ComboboxSelected>>', lambda e: self.after(50, self.refresh_sales_history))
+        days_combo.bind('<<ComboboxSelected>>', lambda e: self.refresh_sales_history())
         
         self.refresh_history_btn = StyledButton(filter_frame, text="Обновить", 
                     command=self.refresh_sales_history, variant='secondary')
@@ -1709,8 +1709,8 @@ class VetPharmacyApp:
                                            fg=self.colors['text_muted'])
         self.history_stats_label.pack(side='left')
         
-        # Загружаем историю после создания всех виджетов
-        self.after(150, self.refresh_sales_history)
+        # Загружаем историю СРАЗУ после создания всех виджетов
+        self.refresh_sales_history()
     
     def refresh_sale_products(self):
         """Обновить список товаров для продажи"""
