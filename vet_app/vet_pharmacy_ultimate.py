@@ -1521,7 +1521,7 @@ class VetPharmacyApp:
         
         self.sale_search_entry = StyledEntry(search_frame, width=35)
         self.sale_search_entry.pack(side='left', fill='x', expand=True)
-        self.sale_search_entry.bind('<KeyRelease>', lambda e: self.refresh_sale_products())
+        self.sale_search_entry.bind('<KeyRelease>', lambda e: self.after(50, self.refresh_sale_products))
         
         # Список товаров для продажи
         products_container = CardFrame(left_frame, padx=5, pady=5)
@@ -1608,12 +1608,15 @@ class VetPharmacyApp:
         action_frame = tk.Frame(left_frame, bg=self.colors['bg_card'])
         action_frame.pack(fill='x', pady=(10, 0))
         
-        StyledButton(action_frame, text="➕ Добавить", 
-                    command=self.add_to_cart_from_tree, variant='primary').pack(side='left', padx=5)
-        StyledButton(action_frame, text="➖ Удалить", 
-                    command=self.remove_from_cart, variant='danger').pack(side='left', padx=5)
-        StyledButton(action_frame, text="🗑 Очистить корзину", 
-                    command=self.clear_cart, variant='secondary').pack(side='left', padx=5)
+        self.add_to_cart_btn = StyledButton(action_frame, text="➕ Добавить", 
+                    command=self.add_to_cart_from_tree, variant='primary')
+        self.add_to_cart_btn.pack(side='left', padx=5)
+        self.remove_from_cart_btn = StyledButton(action_frame, text="➖ Удалить", 
+                    command=self.remove_from_cart, variant='danger')
+        self.remove_from_cart_btn.pack(side='left', padx=5)
+        self.clear_cart_btn = StyledButton(action_frame, text="🗑 Очистить корзину", 
+                    command=self.clear_cart, variant='secondary')
+        self.clear_cart_btn.pack(side='left', padx=5)
         
         # Скидка и завершение
         checkout_frame = tk.Frame(left_frame, bg=self.colors['bg_card'])
@@ -1631,13 +1634,16 @@ class VetPharmacyApp:
         self.discount_entry.insert(0, "0")
         self.discount_entry.pack(side='left')
         
-        StyledButton(checkout_frame, text="✅ Оформить продажу", 
+        self.complete_sale_btn = StyledButton(checkout_frame, text="✅ Оформить продажу", 
                     command=self.complete_sale, variant='success', 
-                    padx=25, pady=10).pack(side='right')
+                    padx=25, pady=10)
+        self.complete_sale_btn.pack(side='right')
         
         # Инициализация корзины
         self.cart = []
-        self.refresh_sale_products()
+        
+        # Загружаем товары для продажи после создания всех виджетов
+        self.after(100, self.refresh_sale_products)
         
         # ===== ПРАВАЯ ПАНЕЛЬ - ИСТОРИЯ ПРОДАЖ =====
         right_frame = CardFrame(main_pane, padx=15, pady=15)
@@ -1666,10 +1672,11 @@ class VetPharmacyApp:
                                  values=["7", "14", "30", "90"], 
                                  width=5, state="readonly")
         days_combo.pack(side='left', padx=(0, 10))
-        days_combo.bind('<<ComboboxSelected>>', lambda e: self.refresh_sales_history())
+        days_combo.bind('<<ComboboxSelected>>', lambda e: self.after(50, self.refresh_sales_history))
         
-        StyledButton(filter_frame, text="Обновить", 
-                    command=self.refresh_sales_history, variant='secondary').pack(side='left')
+        self.refresh_history_btn = StyledButton(filter_frame, text="Обновить", 
+                    command=self.refresh_sales_history, variant='secondary')
+        self.refresh_history_btn.pack(side='left')
         
         # Таблица истории
         history_container = CardFrame(right_frame, padx=5, pady=5)
@@ -1702,10 +1709,15 @@ class VetPharmacyApp:
                                            fg=self.colors['text_muted'])
         self.history_stats_label.pack(side='left')
         
-        self.refresh_sales_history()
+        # Загружаем историю после создания всех виджетов
+        self.after(150, self.refresh_sales_history)
     
     def refresh_sale_products(self):
         """Обновить список товаров для продажи"""
+        # Проверяем существование виджета перед обновлением
+        if not hasattr(self, 'sale_products_tree') or self.sale_products_tree is None:
+            return
+            
         for item in self.sale_products_tree.get_children():
             self.sale_products_tree.delete(item)
         
@@ -1761,6 +1773,10 @@ class VetPharmacyApp:
     
     def update_cart_display(self):
         """Обновить отображение корзины"""
+        # Проверяем существование виджета перед обновлением
+        if not hasattr(self, 'cart_tree') or self.cart_tree is None:
+            return
+            
         for i in self.cart_tree.get_children():
             self.cart_tree.delete(i)
         
@@ -1772,10 +1788,15 @@ class VetPharmacyApp:
             ))
             total += item['subtotal']
         
-        self.cart_total_label.config(text=f"Итого: {total:.0f} ₽")
+        if hasattr(self, 'cart_total_label'):
+            self.cart_total_label.config(text=f"Итого: {total:.0f} ₽")
     
     def remove_from_cart(self):
         """Удалить товар из корзины"""
+        if not hasattr(self, 'cart_tree') or self.cart_tree is None:
+            messagebox.showwarning("Внимание", "Корзина не инициализирована")
+            return
+            
         selection = self.cart_tree.selection()
         if not selection:
             messagebox.showwarning("Внимание", "Выберите товар в корзине")
@@ -1831,6 +1852,10 @@ class VetPharmacyApp:
     
     def refresh_sales_history(self):
         """Обновить историю продаж"""
+        # Проверяем существование виджета перед обновлением
+        if not hasattr(self, 'sales_history_tree') or self.sales_history_tree is None:
+            return
+            
         for item in self.sales_history_tree.get_children():
             self.sales_history_tree.delete(item)
         
@@ -1848,9 +1873,10 @@ class VetPharmacyApp:
             ))
             total_amount += s['final_amount']
         
-        self.history_stats_label.config(
-            text=f"📊 Продаж: {len(sales)} | Сумма: {total_amount:.0f} ₽"
-        )
+        if hasattr(self, 'history_stats_label'):
+            self.history_stats_label.config(
+                text=f"📊 Продаж: {len(sales)} | Сумма: {total_amount:.0f} ₽"
+            )
     
     def show_sale_details(self):
         """Показать детали продажи"""
