@@ -1478,208 +1478,432 @@ class VetPharmacyApp:
                 messagebox.showerror("Ошибка", msg)
     
     def show_sales_tab(self):
-        """Вкладка продаж"""
+        """Вкладка продаж - единый интерфейс"""
         container = tk.Frame(self.content_area, bg=self.colors['bg_main'])
         container.pack(fill='both', expand=True, padx=20, pady=20)
         
         # Заголовок
-        tk.Label(container, text="Продажи", 
+        header_frame = tk.Frame(container, bg=self.colors['bg_main'])
+        header_frame.pack(fill='x', pady=(0, 15))
+        
+        tk.Label(header_frame, text="🛒 Продажи", 
                 font=self.fonts['title'], 
                 bg=self.colors['bg_main'],
-                fg=self.colors['text_main']).pack(anchor='w', pady=(0, 20))
+                fg=self.colors['text_main']).pack(side='left')
         
-        # Кнопки
-        btn_frame = tk.Frame(container, bg=self.colors['bg_main'])
-        btn_frame.pack(fill='x', pady=10)
+        # Основная панель продаж (слева) и история (справа)
+        main_pane = tk.PanedWindow(container, orient='horizontal', 
+                                   bg=self.colors['bg_main'],
+                                   sashwidth=8, sashrelief='raised')
+        main_pane.pack(fill='both', expand=True)
         
-        StyledButton(btn_frame, text="+ Новая продажа", 
-                    command=self.new_sale_dialog).pack(side='left', padx=5)
-        StyledButton(btn_frame, text="📋 История продаж", 
-                    command=self.show_sales_history).pack(side='left', padx=5)
+        # ===== ЛЕВАЯ ПАНЕЛЬ - НОВАЯ ПРОДАЖА =====
+        left_frame = CardFrame(main_pane, padx=15, pady=15)
+        main_pane.add(left_frame, width=650)
+        
+        # Заголовок левой панели
+        left_header = tk.Frame(left_frame, bg=self.colors['bg_card'])
+        left_header.pack(fill='x', pady=(0, 15))
+        
+        tk.Label(left_header, text="➕ Новая продажа", 
+                font=self.fonts['heading'], 
+                bg=self.colors['bg_card'],
+                fg=self.colors['primary']).pack(side='left')
+        
+        # Поиск товара
+        search_frame = tk.Frame(left_frame, bg=self.colors['bg_card'])
+        search_frame.pack(fill='x', pady=(0, 10))
+        
+        tk.Label(search_frame, text="🔍 Поиск:", 
+                font=self.fonts['normal'],
+                bg=self.colors['bg_card'],
+                fg=self.colors['text_muted']).pack(side='left', padx=(0, 8))
+        
+        self.sale_search_entry = StyledEntry(search_frame, width=35)
+        self.sale_search_entry.pack(side='left', fill='x', expand=True)
+        self.sale_search_entry.bind('<KeyRelease>', lambda e: self.refresh_sale_products())
+        
+        # Список товаров для продажи
+        products_container = CardFrame(left_frame, padx=5, pady=5)
+        products_container.pack(fill='both', expand=True, pady=(0, 10))
+        
+        tk.Label(products_container, text="📦 Товары в наличии", 
+                font=('Segoe UI', 11, 'bold'), 
+                bg=self.colors['bg_card'],
+                fg=self.colors['text_main']).pack(fill='x', pady=(5, 10))
+        
+        columns = ('id', 'name', 'brand', 'price', 'quantity', 'unit')
+        self.sale_products_tree = ttk.Treeview(products_container, columns=columns, show='headings', height=8)
+        
+        headers = ["ID", "Название", "Бренд", "Цена", "Остаток", "Ед."]
+        widths = [40, 200, 100, 70, 60, 50]
+        for col, header, width in zip(columns, headers, widths):
+            self.sale_products_tree.heading(col, text=header)
+            self.sale_products_tree.column(col, width=width, minwidth=width)
+        
+        scrollbar = ttk.Scrollbar(products_container, orient="vertical", command=self.sale_products_tree.yview)
+        self.sale_products_tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.sale_products_tree.pack(side='left', fill='both', expand=True)
+        scrollbar.pack(side='right', fill='y')
+        
+        self.sale_products_tree.bind('<Double-1>', lambda e: self.add_to_cart_from_tree())
+        
+        # Корзина
+        cart_container = CardFrame(left_frame, padx=10, pady=10)
+        cart_container.pack(fill='both', expand=True, pady=(0, 10))
+        
+        tk.Label(cart_container, text="🛒 Корзина покупателя", 
+                font=('Segoe UI', 11, 'bold'), 
+                bg=self.colors['bg_card'],
+                fg=self.colors['accent']).pack(fill='x', pady=(0, 10))
+        
+        cart_columns = ('name', 'quantity', 'price', 'subtotal')
+        self.cart_tree = ttk.Treeview(cart_container, columns=cart_columns, show='headings', height=5)
+        
+        cart_headers = ["Товар", "Кол-во", "Цена", "Сумма"]
+        cart_widths = [180, 60, 70, 80]
+        for col, header, width in zip(cart_columns, cart_headers, cart_widths):
+            self.cart_tree.heading(col, text=header)
+            self.cart_tree.column(col, width=width)
+        
+        self.cart_tree.pack(fill='x', pady=(0, 10))
+        
+        # Итого и оплата
+        totals_frame = tk.Frame(cart_container, bg=self.colors['bg_card'])
+        totals_frame.pack(fill='x')
+        
+        self.cart_total_label = tk.Label(totals_frame, text="Итого: 0 ₽", 
+                              font=('Segoe UI', 16, 'bold'),
+                              bg=self.colors['bg_card'],
+                              fg=self.colors['primary'])
+        self.cart_total_label.pack(side='left', padx=(0, 20))
+        
+        # Способ оплаты
+        payment_frame = tk.Frame(totals_frame, bg=self.colors['bg_card'])
+        payment_frame.pack(side='right')
+        
+        tk.Label(payment_frame, text="💳 Оплата:", 
+                font=self.fonts['normal'],
+                bg=self.colors['bg_card'],
+                fg=self.colors['text_muted']).pack(side='left', padx=(0, 8))
+        
+        self.payment_var = tk.StringVar(value='cash')
+        
+        cash_btn = tk.Radiobutton(payment_frame, text="Наличные", variable=self.payment_var, 
+                       value='cash', bg=self.colors['bg_card'],
+                       activebackground=self.colors['bg_card'],
+                       font=self.fonts['normal'],
+                       selectcolor=self.colors['bg_card'])
+        cash_btn.pack(side='left', padx=5)
+        
+        card_btn = tk.Radiobutton(payment_frame, text="Карта", variable=self.payment_var, 
+                       value='card', bg=self.colors['bg_card'],
+                       activebackground=self.colors['bg_card'],
+                       font=self.fonts['normal'],
+                       selectcolor=self.colors['bg_card'])
+        card_btn.pack(side='left', padx=5)
+        
+        # Кнопки действий
+        action_frame = tk.Frame(left_frame, bg=self.colors['bg_card'])
+        action_frame.pack(fill='x', pady=(10, 0))
+        
+        StyledButton(action_frame, text="➕ Добавить", 
+                    command=self.add_to_cart_from_tree, variant='primary').pack(side='left', padx=5)
+        StyledButton(action_frame, text="➖ Удалить", 
+                    command=self.remove_from_cart, variant='danger').pack(side='left', padx=5)
+        StyledButton(action_frame, text="🗑 Очистить корзину", 
+                    command=self.clear_cart, variant='secondary').pack(side='left', padx=5)
+        
+        # Скидка и завершение
+        checkout_frame = tk.Frame(left_frame, bg=self.colors['bg_card'])
+        checkout_frame.pack(fill='x', pady=(15, 0))
+        
+        discount_frame = tk.Frame(checkout_frame, bg=self.colors['bg_card'])
+        discount_frame.pack(side='left', padx=(0, 20))
+        
+        tk.Label(discount_frame, text="Скидка (₽):", 
+                font=self.fonts['normal'],
+                bg=self.colors['bg_card'],
+                fg=self.colors['text_muted']).pack(side='left', padx=(0, 8))
+        
+        self.discount_entry = StyledEntry(discount_frame, width=10)
+        self.discount_entry.insert(0, "0")
+        self.discount_entry.pack(side='left')
+        
+        StyledButton(checkout_frame, text="✅ Оформить продажу", 
+                    command=self.complete_sale, variant='success', 
+                    padx=25, pady=10).pack(side='right')
+        
+        # Инициализация корзины
+        self.cart = []
+        self.refresh_sale_products()
+        
+        # ===== ПРАВАЯ ПАНЕЛЬ - ИСТОРИЯ ПРОДАЖ =====
+        right_frame = CardFrame(main_pane, padx=15, pady=15)
+        main_pane.add(right_frame, width=500)
+        
+        # Заголовок правой панели
+        right_header = tk.Frame(right_frame, bg=self.colors['bg_card'])
+        right_header.pack(fill='x', pady=(0, 15))
+        
+        tk.Label(right_header, text="📋 История продаж", 
+                font=self.fonts['heading'], 
+                bg=self.colors['bg_card'],
+                fg=self.colors['info']).pack(side='left')
+        
+        # Фильтры
+        filter_frame = tk.Frame(right_frame, bg=self.colors['bg_card'])
+        filter_frame.pack(fill='x', pady=(0, 10))
+        
+        tk.Label(filter_frame, text="Период:", 
+                font=self.fonts['normal'],
+                bg=self.colors['bg_card'],
+                fg=self.colors['text_muted']).pack(side='left', padx=(0, 8))
+        
+        self.history_days_var = tk.StringVar(value="7")
+        days_combo = ttk.Combobox(filter_frame, textvariable=self.history_days_var, 
+                                 values=["7", "14", "30", "90"], 
+                                 width=5, state="readonly")
+        days_combo.pack(side='left', padx=(0, 10))
+        days_combo.bind('<<ComboboxSelected>>', lambda e: self.refresh_sales_history())
+        
+        StyledButton(filter_frame, text="Обновить", 
+                    command=self.refresh_sales_history, variant='secondary').pack(side='left')
+        
+        # Таблица истории
+        history_container = CardFrame(right_frame, padx=5, pady=5)
+        history_container.pack(fill='both', expand=True)
+        
+        hist_columns = ('id', 'date', 'amount', 'payment', 'seller')
+        self.sales_history_tree = ttk.Treeview(history_container, columns=hist_columns, show='headings', height=15)
+        
+        hist_headers = ["№", "Дата/Время", "Сумма", "Оплата", "Продавец"]
+        hist_widths = [40, 130, 80, 70, 120]
+        for col, header, width in zip(hist_columns, hist_headers, hist_widths):
+            self.sales_history_tree.heading(col, text=header)
+            self.sales_history_tree.column(col, width=width)
+        
+        hist_scrollbar = ttk.Scrollbar(history_container, orient="vertical", command=self.sales_history_tree.yview)
+        self.sales_history_tree.configure(yscrollcommand=hist_scrollbar.set)
+        
+        self.sales_history_tree.pack(side='left', fill='both', expand=True)
+        hist_scrollbar.pack(side='right', fill='y')
+        
+        self.sales_history_tree.bind('<Double-1>', lambda e: self.show_sale_details())
+        
+        # Статистика за период
+        stats_frame = tk.Frame(right_frame, bg=self.colors['bg_card'])
+        stats_frame.pack(fill='x', pady=(10, 0))
+        
+        self.history_stats_label = tk.Label(stats_frame, text="", 
+                                           font=self.fonts['normal'],
+                                           bg=self.colors['bg_card'],
+                                           fg=self.colors['text_muted'])
+        self.history_stats_label.pack(side='left')
+        
+        self.refresh_sales_history()
     
-    def new_sale_dialog(self):
-        """Диалог новой продажи"""
+    def refresh_sale_products(self):
+        """Обновить список товаров для продажи"""
+        for item in self.sale_products_tree.get_children():
+            self.sale_products_tree.delete(item)
+        
+        search = self.sale_search_entry.get() if hasattr(self, 'sale_search_entry') else ""
+        products = self.db.get_products(search=search)
+        
+        for p in products:
+            if p['quantity'] > 0:
+                self.sale_products_tree.insert('', 'end', values=(
+                    p['id'], p['name'], p['brand'], 
+                    f"{p['price']:.0f}", p['quantity'], p['unit']
+                ))
+    
+    def add_to_cart_from_tree(self):
+        """Добавить товар из дерева товаров в корзину"""
+        selection = self.sale_products_tree.selection()
+        if not selection:
+            messagebox.showwarning("Внимание", "Выберите товар из списка")
+            return
+        
+        item = self.sale_products_tree.item(selection[0])
+        product_id = item['values'][0]
+        product_name = item['values'][1]
+        price = float(item['values'][3])
+        
+        qty = simpledialog.askinteger("Количество", "Введите количество:", 
+                                     initialvalue=1, minvalue=1)
+        if qty and qty > 0:
+            products = self.db.get_products()
+            product = next((p for p in products if p['id'] == product_id), None)
+            
+            if product and qty <= product['quantity']:
+                subtotal = price * qty
+                
+                # Проверяем, есть ли уже такой товар в корзине
+                for cart_item in self.cart:
+                    if cart_item['product_id'] == product_id:
+                        cart_item['quantity'] += qty
+                        cart_item['subtotal'] = cart_item['price'] * cart_item['quantity']
+                        self.update_cart_display()
+                        return
+                
+                self.cart.append({
+                    'product_id': product_id,
+                    'name': product_name,
+                    'quantity': qty,
+                    'price': price,
+                    'subtotal': subtotal
+                })
+                self.update_cart_display()
+            else:
+                messagebox.showerror("Ошибка", "Недостаточно товара на складе")
+    
+    def update_cart_display(self):
+        """Обновить отображение корзины"""
+        for i in self.cart_tree.get_children():
+            self.cart_tree.delete(i)
+        
+        total = 0
+        for item in self.cart:
+            self.cart_tree.insert('', 'end', values=(
+                item['name'], item['quantity'], 
+                f"{item['price']:.0f}", f"{item['subtotal']:.0f}"
+            ))
+            total += item['subtotal']
+        
+        self.cart_total_label.config(text=f"Итого: {total:.0f} ₽")
+    
+    def remove_from_cart(self):
+        """Удалить товар из корзины"""
+        selection = self.cart_tree.selection()
+        if not selection:
+            messagebox.showwarning("Внимание", "Выберите товар в корзине")
+            return
+        
+        idx = self.cart_tree.index(selection[0])
+        self.cart.pop(idx)
+        self.update_cart_display()
+    
+    def clear_cart(self):
+        """Очистить корзину"""
+        self.cart = []
+        self.update_cart_display()
+    
+    def complete_sale(self):
+        """Завершить продажу"""
+        if not self.cart:
+            messagebox.showwarning("Предупреждение", "Корзина пуста")
+            return
+        
+        try:
+            discount = float(self.discount_entry.get() or 0)
+            if discount < 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Ошибка", "Некорректное значение скидки")
+            return
+        
+        total = sum(item['subtotal'] for item in self.cart)
+        if discount > total:
+            messagebox.showerror("Ошибка", "Скидка не может превышать сумму заказа")
+            return
+        
+        success, sale_id, msg = self.db.create_sale(
+            items=self.cart,
+            discount=discount,
+            payment_method=self.payment_var.get(),
+            seller_id=self.current_user['id'],
+            customer_name='',
+            notes=''
+        )
+        
+        if success:
+            messagebox.showinfo("Успех", f"Продажа #{sale_id} оформлена!\n{msg}")
+            self.cart = []
+            self.discount_entry.delete(0, 'end')
+            self.discount_entry.insert(0, "0")
+            self.update_cart_display()
+            self.refresh_sale_products()
+            self.refresh_sales_history()
+        else:
+            messagebox.showerror("Ошибка", msg)
+    
+    def refresh_sales_history(self):
+        """Обновить историю продаж"""
+        for item in self.sales_history_tree.get_children():
+            self.sales_history_tree.delete(item)
+        
+        days = int(self.history_days_var.get())
+        sales = self.db.get_sales_history(days)
+        
+        total_amount = 0
+        for s in sales:
+            self.sales_history_tree.insert('', 'end', values=(
+                s['id'], 
+                s['sale_date'][:16].replace('T', ' '),
+                f"{s['final_amount']:.0f}",
+                "💳" if s['payment_method'] == 'card' else "💵",
+                s['seller_name'][:15]
+            ))
+            total_amount += s['final_amount']
+        
+        self.history_stats_label.config(
+            text=f"📊 Продаж: {len(sales)} | Сумма: {total_amount:.0f} ₽"
+        )
+    
+    def show_sale_details(self):
+        """Показать детали продажи"""
+        selection = self.sales_history_tree.selection()
+        if not selection:
+            return
+        
+        item = self.sales_history_tree.item(selection[0])
+        sale_id = item['values'][0]
+        
+        # Получаем детали продажи из БД
+        conn = self.db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            SELECT si.product_id, si.name, si.quantity, si.price, si.subtotal
+            FROM sale_items si
+            WHERE si.sale_id = ?
+        ''', (sale_id,))
+        items = cursor.fetchall()
+        conn.close()
+        
+        if not items:
+            return
+        
         dialog = tk.Toplevel(self.root)
-        dialog.title("Новая продажа")
-        dialog.geometry("800x600")
+        dialog.title(f"Детали продажи #{sale_id}")
+        dialog.geometry("500x400")
         dialog.transient(self.root)
         dialog.grab_set()
         
-        cart = []
+        frame = tk.Frame(dialog, bg=self.colors['bg_card'])
+        frame.pack(fill='both', expand=True, padx=20, pady=20)
         
-        main_frame = tk.Frame(dialog, bg=self.colors['bg_card'])
-        main_frame.pack(fill='both', expand=True, padx=20, pady=20)
+        tk.Label(frame, text=f"📋 Продажа #{sale_id}", 
+                font=self.fonts['heading'],
+                bg=self.colors['bg_card'],
+                fg=self.colors['info']).pack(pady=(0, 15))
         
-        # Поиск товара
-        search_frame = tk.Frame(main_frame, bg=self.colors['bg_card'])
-        search_frame.pack(fill='x', pady=(0, 15))
+        columns = ('name', 'qty', 'price', 'subtotal')
+        tree = ttk.Treeview(frame, columns=columns, show='headings')
         
-        tk.Label(search_frame, text="Поиск товара:", 
-                bg=self.colors['bg_card']).pack(side='left', padx=(0, 10))
-        
-        search_entry = StyledEntry(search_frame, width=50)
-        search_entry.pack(side='left', padx=(0, 10))
-        
-        def search_products():
-            for item in products_tree.get_children():
-                products_tree.delete(item)
-            
-            search = search_entry.get()
-            products = self.db.get_products(search=search)
-            
-            for p in products:
-                if p['quantity'] > 0:
-                    products_tree.insert('', 'end', values=(
-                        p['id'], p['name'], p['brand'], 
-                        f"{p['price']:.0f} ₽", f"{p['quantity']} {p['unit']}"
-                    ))
-        
-        search_entry.bind('<KeyRelease>', lambda e: search_products())
-        
-        # Список товаров
-        tree_frame = CardFrame(main_frame)
-        tree_frame.pack(fill='both', expand=True, pady=10)
-        
-        columns = ('id', 'name', 'brand', 'price', 'quantity')
-        products_tree = ttk.Treeview(tree_frame, columns=columns, show='headings', height=10)
-        
-        headers = ["ID", "Название", "Бренд", "Цена", "На складе"]
+        headers = ["Товар", "Кол-во", "Цена", "Сумма"]
         for col, header in zip(columns, headers):
-            products_tree.heading(col, text=header)
-            products_tree.column(col, width=120)
+            tree.heading(col, text=header)
+            tree.column(col, width=100)
         
-        products_tree.pack(fill='both', expand=True)
-        search_products()
+        tree.pack(fill='both', expand=True)
         
-        # Корзина
-        cart_frame = tk.LabelFrame(main_frame, text="Корзина", 
-                                  bg=self.colors['bg_card'],
-                                  fg=self.colors['text_main'])
-        cart_frame.pack(fill='x', pady=10)
+        for name, qty, price, subtotal in items:
+            tree.insert('', 'end', values=(name[:25], qty, f"{price:.0f}", f"{subtotal:.0f}"))
         
-        cart_columns = ('name', 'quantity', 'price', 'subtotal')
-        cart_tree = ttk.Treeview(cart_frame, columns=cart_columns, show='headings', height=5)
-        
-        cart_headers = ["Товар", "Кол-во", "Цена", "Сумма"]
-        for col, header in zip(cart_columns, cart_headers):
-            cart_tree.heading(col, text=header)
-            cart_tree.column(col, width=150)
-        
-        cart_tree.pack(fill='x', padx=10, pady=10)
-        
-        total_label = tk.Label(cart_frame, text="Итого: 0 ₽", 
-                              font=self.fonts['heading'],
-                              bg=self.colors['bg_card'],
-                              fg=self.colors['primary'])
-        total_label.pack(pady=10)
-        
-        def add_to_cart():
-            selection = products_tree.selection()
-            if not selection:
-                return
-            
-            item = products_tree.item(selection[0])
-            product_id = item['values'][0]
-            product_name = item['values'][1]
-            price = float(item['values'][3].replace(' ₽', ''))
-            
-            qty = simpledialog.askinteger("Количество", "Введите количество:", 
-                                         initialvalue=1, minvalue=1)
-            if qty:
-                products = self.db.get_products()
-                product = next((p for p in products if p['id'] == product_id), None)
-                
-                if product and qty <= product['quantity']:
-                    subtotal = price * qty
-                    cart.append({
-                        'product_id': product_id,
-                        'name': product_name,
-                        'quantity': qty,
-                        'price': price,
-                        'subtotal': subtotal
-                    })
-                    
-                    for i in cart_tree.get_children():
-                        cart_tree.delete(i)
-                    
-                    total = 0
-                    for item in cart:
-                        cart_tree.insert('', 'end', values=(
-                            item['name'], item['quantity'], 
-                            f"{item['price']:.0f} ₽", f"{item['subtotal']:.0f} ₽"
-                        ))
-                        total += item['subtotal']
-                    
-                    total_label.config(text=f"Итого: {total:.0f} ₽")
-                else:
-                    messagebox.showerror("Ошибка", "Недостаточно товара на складе")
-        
-        def remove_from_cart():
-            selection = cart_tree.selection()
-            if selection:
-                idx = cart_tree.index(selection[0])
-                cart.pop(idx)
-                
-                for i in cart_tree.get_children():
-                    cart_tree.delete(i)
-                
-                total = 0
-                for item in cart:
-                    cart_tree.insert('', 'end', values=(
-                        item['name'], item['quantity'],
-                        f"{item['price']:.0f} ₽", f"{item['subtotal']:.0f} ₽"
-                    ))
-                    total += item['subtotal']
-                
-                total_label.config(text=f"Итого: {total:.0f} ₽")
-        
-        # Кнопки
-        action_frame = tk.Frame(main_frame, bg=self.colors['bg_card'])
-        action_frame.pack(fill='x', pady=10)
-        
-        StyledButton(action_frame, text="Добавить в корзину", 
-                    command=add_to_cart).pack(side='left', padx=5)
-        StyledButton(action_frame, text="Удалить из корзины", 
-                    command=remove_from_cart, variant='danger').pack(side='left', padx=5)
-        
-        # Оплата
-        payment_frame = tk.Frame(main_frame, bg=self.colors['bg_card'])
-        payment_frame.pack(fill='x', pady=10)
-        
-        tk.Label(payment_frame, text="Способ оплаты:", 
-                bg=self.colors['bg_card']).pack(side='left', padx=(0, 10))
-        
-        payment_var = tk.StringVar(value='cash')
-        ttk.Radiobutton(payment_frame, text="Наличные", variable=payment_var, 
-                       value='cash', bg=self.colors['bg_card']).pack(side='left')
-        ttk.Radiobutton(payment_frame, text="Карта", variable=payment_var, 
-                       value='card', bg=self.colors['bg_card']).pack(side='left', padx=10)
-        
-        def complete_sale():
-            if not cart:
-                messagebox.showwarning("Предупреждение", "Корзина пуста")
-                return
-            
-            discount = simpledialog.askfloat("Скидка", "Введите скидку (₽):", 
-                                           initialvalue=0, minvalue=0) or 0
-            
-            success, sale_id, msg = self.db.create_sale(
-                items=cart,
-                discount=discount,
-                payment_method=payment_var.get(),
-                seller_id=self.current_user['id'],
-                customer_name='',
-                notes=''
-            )
-            
-            if success:
-                messagebox.showinfo("Успех", f"Продажа #{sale_id} оформлена!\n{msg}")
-                dialog.destroy()
-            else:
-                messagebox.showerror("Ошибка", msg)
-        
-        StyledButton(action_frame, text="✅ Оформить продажу", 
-                    command=complete_sale, variant='success').pack(side='right')
+        StyledButton(frame, text="Закрыть", 
+                    command=dialog.destroy).pack(pady=(15, 0))
     
     def show_sales_history(self):
         """История продаж"""
